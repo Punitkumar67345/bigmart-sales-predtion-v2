@@ -1,149 +1,176 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import pickle
 import pandas as pd
 import os
-from pymongo import MongoClient
 from typing import List, Dict, Any
 
-# 1. FastAPI Initialize
-app = FastAPI()
+# ─── FastAPI Init ─────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="Big Mart Intelligence API",
+    description="AI-powered sales prediction, shelf analysis & optimization engine",
+    version="2.0.0"
+)
 
-# -------------------------------
-# LOAD MODEL
-# -------------------------------
+# CORS — allow Streamlit frontend to call freely
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─── Load Model ───────────────────────────────────────────────────────────────
 model_path = os.path.join(os.path.dirname(__file__), "../model/model.pkl")
-model = pickle.load(open(model_path, "rb"))
+try:
+    model = pickle.load(open(model_path, "rb"))
+    print("✅ Model loaded successfully")
+except FileNotFoundError:
+    model = None
+    print("⚠️  model.pkl not found — predictions will return dummy values")
 
-# -------------------------------
-# MONGODB CONNECTION
-# -------------------------------
-client = MongoClient("mongodb://localhost:27017/")
-db = client["bigmart_db"]
-collection = db["predictions"]
+# ─── MongoDB (optional) ───────────────────────────────────────────────────────
+try:
+    from pymongo import MongoClient
+    _client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    _client.server_info()
+    _db = _client["bigmart_db"]
+    _col = _db["predictions"]
+    MONGO_OK = True
+    print("✅ MongoDB connected")
+except Exception:
+    _col = None
+    MONGO_OK = False
+    print("⚠️  MongoDB not available — results won't be persisted")
+
+
+def _save(doc: dict):
+    """Best-effort MongoDB save."""
+    if MONGO_OK and _col is not None:
+        try:
+            _col.insert_one(doc)
+        except Exception:
+            pass
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _prepare(df: pd.DataFrame) -> pd.DataFrame:
+    """Add Outlet_Age and align columns to model features."""
+    if "Outlet_Age" not in df.columns and "Outlet_Establishment_Year" in df.columns:
+        df["Outlet_Age"] = 2026 - df["Outlet_Establishment_Year"]
+
+    if model is None:
+        return df
+
+    for col in model.feature_names_in_:
+        if col not in df.columns:
+            df[col] = 0
+    return df[model.feature_names_in_]
+
+
+def _predict_values(df: pd.DataFrame) -> list:
+    """Return predictions; falls back to dummy if model missing."""
+    if model is None:
+        return [round(float(row.get("Item_MRP", 100)) * 15 + 500, 2) for _, row in df.iterrows()]
+    return list(model.predict(df))
+
+
+def _shelf_analysis(visibility: float, prediction: float):
+    if visibility > 0.12 and prediction < 1500:
+        return (
+            "Underperforming Asset: High visibility but low conversion. Needs quality review.",
+            "warning"
+        )
+    elif visibility < 0.05 and prediction > 2500:
+        return (
+            "High-Potential Asset: Strong organic demand despite low visibility. Boost shelf space.",
+            "upgrade"
+        )
+    return (
+        "Stable Asset: Item attributes and sales are well balanced.",
+        "optimal"
+    )
+
+
+def _opt_strategy(prediction: float, mrp: float):
+    units = prediction / max(mrp, 1)
+    if units < 10:
+        return ("Clearance Strategy: Apply 15–20% discount to clear excess inventory.", "discount")
+    elif units >= 30:
+        return ("Profit Maximize: High demand — keep 100+ units stocked. No discount needed.", "profit")
+    return ("Balanced Strategy: Maintain regular stock. Optional 5% promotional discount.", "balanced")
+
+
+# ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.get("/")
 def home():
-    return {"message": "Big Mart Intelligence Backend Running"}
-
-# -------------------------------
-# API 1: SINGLE PREDICTION
-# -------------------------------
-@app.post("/predict")
-def predict(data: dict):
-    input_df = pd.DataFrame([data])
-
-    for col in model.feature_names_in_:
-        if col not in input_df.columns:
-            input_df[col] = 0
-    input_df = input_df[model.feature_names_in_]
-
-    prediction = float(model.predict(input_df)[0])
-    visibility = data.get("Item_Visibility", 0)
-    mrp = data.get("Item_MRP", 1)
-
-    # -------------------------------
-    # INNOVATION 1: SELF ANALYSIS
-    # -------------------------------
-    if visibility > 0.12 and prediction < 1500:
-        self_action = "Underperforming Asset: High visibility but low conversion. Needs quality review."
-        self_status = "warning"
-        shelf_action = self_action
-        shelf_status = self_status
-    elif visibility < 0.05 and prediction > 2500:
-        self_action = "High-Potential Asset: Strong organic demand despite low visibility."
-        self_status = "upgrade"
-        shelf_action = self_action
-        shelf_status = self_status
-    else:
-        self_action = "Stable Asset: Item attributes and sales are perfectly balanced."
-        self_status = "optimal"
-        shelf_action = self_action
-        shelf_status = self_status
-
-    # -------------------------------
-    # INNOVATION 2: MULTI-OBJECTIVE OPTIMIZATION
-    # -------------------------------
-    expected_units_sold = prediction / mrp
-
-    if expected_units_sold < 10:
-        opt_action = "Clearance Strategy: Apply 15-20% Discount to minimize excess inventory."
-        opt_status = "discount"
-    elif expected_units_sold >= 30:
-        opt_action = "Profit Maximize: High demand. Keep 100+ units in stock. 0% Discount."
-        opt_status = "profit"
-    else:
-        opt_action = "Balanced Strategy: Maintain regular stock. Optional 5% promotional discount."
-        opt_status = "balanced"
-
-    # MongoDB save
-    try:
-        collection.insert_one({
-            "input": data,
-            "prediction": prediction,
-            "self_analysis": self_action,
-            "optimization": opt_action,
-            "type": "single"
-        })
-    except Exception:
-        pass  # MongoDB na ho toh bhi app chale
-
     return {
-        "prediction": prediction,
-        "self_action": self_action,
-        "self_status": self_status,
-        "shelf_action": shelf_action,   # app.py ke liye
-        "shelf_status": shelf_status,   # app.py ke liye
-        "opt_action": opt_action,
-        "opt_status": opt_status
+        "message": "Big Mart Intelligence Backend v2.0 — Running ✅",
+        "model_loaded": model is not None,
+        "mongo_connected": MONGO_OK
     }
 
-# -------------------------------
-# API 2: BULK PREDICTION
-# -------------------------------
+
+@app.post("/predict")
+def predict(data: dict):
+    try:
+        df = pd.DataFrame([data])
+        prepared = _prepare(df.copy())
+        prediction = float(_predict_values(prepared)[0])
+
+        visibility = float(data.get("Item_Visibility", 0))
+        mrp = float(data.get("Item_MRP", 1))
+
+        shelf_action, shelf_status = _shelf_analysis(visibility, prediction)
+        opt_action, opt_status = _opt_strategy(prediction, mrp)
+
+        result = {
+            "prediction": round(prediction, 2),
+            "shelf_action": shelf_action,
+            "shelf_status": shelf_status,
+            "opt_action": opt_action,
+            "opt_status": opt_status,
+        }
+
+        _save({"type": "single", "input": data, **result})
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/predict_bulk")
 def predict_bulk(data_list: List[Dict[str, Any]]):
-    input_df = pd.DataFrame(data_list)
-
-    if 'Outlet_Age' not in input_df.columns and 'Outlet_Establishment_Year' in input_df.columns:
-        input_df['Outlet_Age'] = 2026 - input_df['Outlet_Establishment_Year']
-
-    for col in model.feature_names_in_:
-        if col not in input_df.columns:
-            input_df[col] = 0
-
-    predict_df = input_df[model.feature_names_in_]
-    predictions = model.predict(predict_df)
-    input_df['Predicted_Sales'] = predictions
-
-    self_actions = []
-    opt_actions = []
-
-    for index, row in input_df.iterrows():
-        vis = row.get('Item_Visibility', 0)
-        mrp_val = row.get('Item_MRP', 1)
-        pred = row['Predicted_Sales']
-
-        if vis > 0.12 and pred < 1500:
-            self_actions.append("Underperforming Asset")
-        elif vis < 0.05 and pred > 2500:
-            self_actions.append("High-Potential Asset")
-        else:
-            self_actions.append("Stable Asset")
-
-        units = pred / mrp_val
-        if units < 10:
-            opt_actions.append("Apply 15% Discount (Clearance)")
-        elif units >= 30:
-            opt_actions.append("Maximize Profit (High Stock, 0% Disc)")
-        else:
-            opt_actions.append("Balanced Stock (5% Disc)")
-
-    input_df['Shelf_Action'] = self_actions
-    input_df['Optimization_Strategy'] = opt_actions
+    if not data_list:
+        raise HTTPException(status_code=400, detail="Empty payload.")
 
     try:
-        collection.insert_one({"type": "bulk_upload", "count": len(data_list)})
-    except Exception:
-        pass
+        df = pd.DataFrame(data_list)
+        prepared = _prepare(df.copy())
+        preds = _predict_values(prepared)
+        df["Predicted_Sales"] = [round(float(p), 2) for p in preds]
 
-    return {"results": input_df.to_dict(orient="records")}
+        shelf_actions, shelf_statuses = [], []
+        opt_actions, opt_statuses = [], []
+
+        for _, row in df.iterrows():
+            sa, ss = _shelf_analysis(float(row.get("Item_Visibility", 0)), row["Predicted_Sales"])
+            oa, os_ = _opt_strategy(row["Predicted_Sales"], float(row.get("Item_MRP", 1)))
+            shelf_actions.append(sa)
+            shelf_statuses.append(ss)
+            opt_actions.append(oa)
+            opt_statuses.append(os_)
+
+        df["Shelf_Action"] = shelf_actions
+        df["Shelf_Status"] = shelf_statuses
+        df["Optimization_Strategy"] = opt_actions
+        df["Opt_Status"] = opt_statuses
+
+        _save({"type": "bulk", "count": len(data_list)})
+
+        return {"results": df.to_dict(orient="records"), "count": len(df)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
