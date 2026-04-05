@@ -3,69 +3,80 @@ import numpy as np
 import pickle
 import json
 import os
-from xgboost import XGBRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
-from sklearn.compose import TransformedTargetRegressor # 🚀 YEH WAPAS RUPEES ME BADLEGA
+from sklearn.compose import TransformedTargetRegressor
 
 # 1. Dataset load
 df = pd.read_csv("data/train.csv")
 
 # ==========================================
-# 🧹 SAFE PREPROCESSING (API COMPATIBLE)
+# 🧠 SMART IMPUTATION & FEATURE ENGINEERING
 # ==========================================
-df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].mean())
-df['Outlet_Size'] = df['Outlet_Size'].fillna('Medium')
-df['Item_Visibility'] = df['Item_Visibility'].replace(0, df['Item_Visibility'].mean())
-df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF': 'Low Fat', 'low fat': 'Low Fat', 'reg': 'Regular'})
+item_weight_mean = df.pivot_table(values='Item_Weight', index='Item_Identifier')
+miss_bool = df['Item_Weight'].isnull()
+df.loc[miss_bool, 'Item_Weight'] = df.loc[miss_bool, 'Item_Identifier'].apply(
+    lambda x: item_weight_mean.loc[x].values[0] if x in item_weight_mean.index else df['Item_Weight'].mean()
+)
 
-# Outlet Age
+outlet_size_mode = df.pivot_table(values='Outlet_Size', columns='Outlet_Type', aggfunc=(lambda x: x.mode()[0]))
+miss_bool = df['Outlet_Size'].isnull()
+df.loc[miss_bool, 'Outlet_Size'] = df.loc[miss_bool, 'Outlet_Type'].apply(lambda x: outlet_size_mode[x])
+
+df['Item_Visibility'] = df['Item_Visibility'].replace(0, df['Item_Visibility'].mean())
+
+df['Item_Category'] = df['Item_Identifier'].apply(lambda x: x[0:2]).map({'FD':'Food', 'NC':'Non-Consumable', 'DR':'Drinks'})
+
+df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF':'Low Fat', 'low fat':'Low Fat', 'reg':'Regular'})
+df.loc[df['Item_Category'] == 'Non-Consumable', 'Item_Fat_Content'] = 'Non-Edible'
+
 df['Outlet_Age'] = 2026 - df['Outlet_Establishment_Year']
 
-# Drop columns that API doesn't send
+# Unnecessary columns drop
 df.drop(['Item_Identifier', 'Outlet_Identifier', 'Outlet_Establishment_Year'], axis=1, inplace=True)
 
-# Categorical to Numbers
 df = pd.get_dummies(df, drop_first=True)
 
 X = df.drop('Item_Outlet_Sales', axis=1)
-y = df['Item_Outlet_Sales'] # Yahan raw data hi rakhenge
+y = df['Item_Outlet_Sales']  # 🚨 THE FIX: Raw 'y' hi rakhna hai! (No manual log)
 
-# Train-Test Split
+# Train-Test Split me RAW 'y' bhejenge
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # ==========================================
-# 🎯 THE BUG-FREE XGBOOST MODEL
+# 🌲 RANDOM FOREST MODEL
 # ==========================================
-xgb_model = XGBRegressor(
-    n_estimators=150,
-    learning_rate=0.06,
-    max_depth=5,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42
+rf_base = RandomForestRegressor(
+    n_estimators=150,        
+    max_depth=6,             
+    min_samples_split=5,     
+    min_samples_leaf=2,      
+    random_state=42,
+    n_jobs=-1                
 )
 
-# 🚀 THE FIX: Yeh wrapper automatically convert karega!
+# 🚀 Yeh Automatically Log lega aur Automatically Rupees me badlega
 model = TransformedTargetRegressor(
-    regressor=xgb_model,
-    func=np.log1p,          # Train karte waqt log banayega
-    inverse_func=np.expm1   # Predict karte waqt wapas RUPEES me dega
+    regressor=rf_base,
+    func=np.log1p,         
+    inverse_func=np.expm1    
 )
 
 # Train the model
 model.fit(X_train, y_train)
 
-# Calculate Accuracies
+# 🚨 THE FIX 2: Prediction direct rupees me aayegi, ab wapas expm1 lagane ki zaroorat nahi
 train_pred = model.predict(X_train)
 test_pred = model.predict(X_test)
 
+# Accuracies calculate karo
 train_acc = r2_score(y_train, train_pred) * 100
 test_acc = r2_score(y_test, test_pred) * 100
 
 print("=========================================")
-print(f"📈 TRAINING ACCURACY (Dashboard):  {train_acc:.2f}%")
-print(f"📊 TESTING ACCURACY  (Real World): {test_acc:.2f}%")
+print(f"📈 TRAINING ACCURACY (For Dashboard): {train_acc:.2f}%")
+print(f"📊 TESTING ACCURACY  (Real World):    {test_acc:.2f}%")
 print("=========================================")
 
 # Save Model and Metrics
@@ -76,4 +87,4 @@ metrics = {"accuracy": round(train_acc, 2)}
 with open("model/metrics.json", "w") as f:
     json.dump(metrics, f)
 
-print("✅ BUG FIXED! Model ab normal paise me answer dega!")
+print("✅ BUG FIXED! Model ab sach much hazaron rupaye (Rs) me answer dega!")

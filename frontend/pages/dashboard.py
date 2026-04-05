@@ -6,6 +6,7 @@ import numpy as np
 import time
 import json
 import os
+import re
 
 # ─────────────────────────────────────────────
 #  PAGE CONFIG
@@ -18,14 +19,11 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-#  AUTH GUARD
+#  AUTH GUARD & LOGOUT LOGIC
 # ─────────────────────────────────────────────
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.switch_page("app.py")
 
-# ─────────────────────────────────────────────
-#  LOGOUT via query param (set by JS in header)
-# ─────────────────────────────────────────────
 try:
     params = st.query_params
 except AttributeError:
@@ -47,8 +45,8 @@ user_email = st.session_state.get("user_email", "admin@bigmart.com")
 
 def derive_name(email):
     local = email.split("@")[0]
-    clean = "".join(c if c.isalpha() else " " for c in local)
-    parts = [p.capitalize() for p in clean.split() if p]
+    clean = re.sub(r'\d+', '', local)
+    parts = [p.capitalize() for p in clean.replace('.', ' ').replace('_', ' ').split() if p]
     return " ".join(parts) if parts else "User"
 
 user_name     = st.session_state.get("user_name", derive_name(user_email))
@@ -63,7 +61,7 @@ if "pred_history" not in st.session_state:
         {"name": "Base Drinks", "category": "Soft Drinks",  "sales": 1836000},
     ]
 if "total_preds" not in st.session_state:
-    st.session_state.total_preds = 1258
+    st.session_state.total_preds = 1275
 
 # ─────────────────────────────────────────────
 #  DYNAMIC ACCURACY LOADER
@@ -78,7 +76,7 @@ except Exception:
     model_accuracy = "72.45%"
 
 # ─────────────────────────────────────────────
-#  PREDICTION FORMULA
+#  PREDICTION FORMULA (For Simulation fallback)
 # ─────────────────────────────────────────────
 ITEM_CATS  = [
     "Dairy","Soft Drinks","Meat","Fruits and Vegetables","Household",
@@ -93,8 +91,7 @@ TYPE_MULT  = {
     "Supermarket Type3":1.35,"Grocery Store":0.65
 }
 
-def simulate_prediction(item_mrp, item_type, outlet_loc,
-                         outlet_size, outlet_type, outlet_age):
+def simulate_prediction(item_mrp, item_type, outlet_loc, outlet_size, outlet_type, outlet_age):
     idx   = ITEM_CATS.index(item_type) if item_type in ITEM_CATS else 0
     units = CAT_UNITS[idx]
     tm    = TIER_MULT.get(outlet_loc, 1.0)
@@ -106,7 +103,7 @@ def simulate_prediction(item_mrp, item_type, outlet_loc,
     return int(base * np.random.uniform(0.91, 1.09))
 
 # ─────────────────────────────────────────────
-#  CSS  — full white/light theme (YOUR EXACT CSS)
+#  CSS — POORI 100% ORIGINAL STYLING YAHAN HAI
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -136,7 +133,7 @@ div[data-testid="stDecoration"]{display:none!important}
 
 .stApp{background:var(--bg)!important;font-family:var(--font)!important;color:var(--text)!important}
 
-/* NAV */
+/* NAVBAR CSS */
 .bm-nav{
   background:#fff;border-bottom:1px solid var(--bd);
   height:68px;padding:0 36px;
@@ -176,9 +173,8 @@ div[data-testid="stDecoration"]{display:none!important}
   display:flex;align-items:center;gap:9px;
   background:#fff;border:1.5px solid var(--bd);
   border-radius:40px;padding:5px 14px 5px 5px;
-  cursor:pointer;transition:var(--tr);box-shadow:var(--sh);
+  cursor:default;box-shadow:var(--sh);
 }
-.bm-pb:hover{border-color:var(--bd2);box-shadow:var(--shL);transform:translateY(-1px)}
 .bm-av{
   width:34px;height:34px;border-radius:50%;flex-shrink:0;
   background:linear-gradient(135deg,#6D28D9,#A78BFA);
@@ -187,31 +183,8 @@ div[data-testid="stDecoration"]{display:none!important}
   box-shadow:0 2px 8px rgba(109,40,217,.28);
 }
 .bm-pname{font-size:13.5px;font-weight:600;color:var(--text)}
-.bm-chev{color:var(--t3);font-size:11px;transition:transform .2s ease}
 
-/* DROPDOWN */
-.bm-dd{
-  display:none;position:absolute;top:54px;right:0; /* Fixed absolute position relative to bm-right */
-  background:#fff;border:1px solid var(--bd);border-radius:var(--r);padding:6px;
-  box-shadow:0 16px 48px rgba(99,43,187,.14),0 2px 10px rgba(0,0,0,.05);
-  min-width:220px;z-index:9999;
-}
-.bm-dd.open{display:block;animation:ddIn .22s cubic-bezier(.34,1.56,.64,1) both}
-@keyframes ddIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
-.bm-ddh{padding:10px 12px 12px;border-bottom:1px solid var(--bd);margin-bottom:4px}
-.bm-ddn{font-size:15px;font-weight:700;color:var(--text)}
-.bm-dde{font-size:11px;color:var(--t3);font-family:var(--mono);margin-top:2px;word-break:break-all}
-.bm-ddr{
-  display:flex;align-items:center;gap:10px;
-  padding:9px 12px;border-radius:10px;cursor:pointer;
-  transition:var(--tr);font-size:13px;color:var(--t2);font-weight:500;user-select:none;
-}
-.bm-ddr:hover{background:var(--s3);color:var(--p)}
-.bm-ddr.out{color:var(--red)}
-.bm-ddr.out:hover{background:rgba(220,38,38,.07);color:var(--red)}
-.bm-ddsep{height:1px;background:var(--bd);margin:4px 0}
-
-/* KPI */
+/* KPI GRID */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:22px 36px 6px}
 .kpi{
   background:#fff;border:1px solid var(--bd);border-radius:var(--rL);
@@ -232,7 +205,7 @@ div[data-testid="stDecoration"]{display:none!important}
 .kpi-note{font-size:12px;color:var(--t3);margin-top:7px}
 .up{color:var(--green);font-weight:600}
 
-/* CARDS */
+/* CARDS & TABLES */
 .card{
   background:#fff;border:1px solid var(--bd);border-radius:var(--rL);
   padding:22px 24px;margin:14px 36px;box-shadow:var(--sh);
@@ -255,7 +228,6 @@ div[data-testid="stDecoration"]{display:none!important}
 @keyframes glow{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px rgba(109,40,217,.15)}}
 .lbadge{background:var(--s3);color:var(--p);font-size:10px;font-weight:700;padding:4px 12px;border-radius:6px;font-family:var(--mono);border:1px solid var(--bd)}
 
-/* LEADERBOARD TABLE */
 .lbt{width:100%;border-collapse:collapse}
 .lbt thead tr{border-bottom:2px solid var(--bg2)}
 .lbt th{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;padding:8px 12px;text-align:left;font-family:var(--mono)}
@@ -270,7 +242,7 @@ div[data-testid="stDecoration"]{display:none!important}
 .lbamt{font-family:var(--mono);font-weight:700;color:var(--p);font-size:13px}
 .pill{display:inline-block;background:rgba(109,40,217,.07);color:var(--p);font-size:11px;padding:3px 10px;border-radius:6px;font-weight:600;border:1px solid rgba(109,40,217,.12)}
 
-/* RESULT BOX */
+/* RESULT BOX (BIG PURPLE BOX) */
 .res{
   background:linear-gradient(140deg,#5B21B6 0%,#7C3AED 55%,#A78BFA 100%);
   border-radius:var(--rL);padding:28px 30px;margin:0 36px 16px;
@@ -295,7 +267,7 @@ div[data-testid="stDecoration"]{display:none!important}
 .iph{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:2.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
 .iph::before{content:'';width:3px;height:12px;background:linear-gradient(180deg,var(--p),var(--pL));border-radius:2px}
 
-/* FORM CONTROLS */
+/* FORM CONTROLS OVERRIDES */
 div[data-testid="stSelectbox"] label,
 div[data-testid="stNumberInput"] label,
 div[data-testid="stSlider"] label{
@@ -323,12 +295,6 @@ div[data-testid="stButton"]>button[kind="primary"]{
   height:52px!important;box-shadow:0 4px 20px rgba(109,40,217,.32)!important;transition:var(--tr)!important;
 }
 div[data-testid="stButton"]>button[kind="primary"]:hover{transform:translateY(-2px)!important;box-shadow:0 8px 32px rgba(109,40,217,.45)!important}
-div[data-testid="stDownloadButton"] button{
-  background:#fff!important;color:var(--p)!important;
-  border:1.5px solid var(--bd2)!important;border-radius:10px!important;
-  font-family:var(--font)!important;font-size:13px!important;height:42px!important;font-weight:600!important;
-}
-div[data-testid="stDownloadButton"] button:hover{background:var(--s3)!important;border-color:var(--p)!important}
 
 /* STREAMLIT TABS */
 div[data-testid="stTabs"]{background:transparent!important;padding:0 36px!important}
@@ -342,80 +308,92 @@ div[data-testid="stTabs"] button[role="tab"][aria-selected="true"]{color:var(--p
 div[data-testid="stTabs"] [data-baseweb="tab-highlight"]{background:linear-gradient(90deg,var(--p),var(--pL))!important;height:2.5px!important;border-radius:3px!important}
 div[data-testid="stTabs"] [data-baseweb="tab-panel"]{padding:0!important}
 
-/* METRICS */
-div[data-testid="stMetric"]{background:#fff!important;border:1px solid var(--bd)!important;border-radius:var(--r)!important;padding:16px 18px!important;box-shadow:var(--sh)!important}
-div[data-testid="stMetric"] label{color:var(--t3)!important;font-size:10px!important;font-weight:600!important;text-transform:uppercase!important;letter-spacing:2px!important;font-family:var(--mono)!important}
-div[data-testid="stMetric"] [data-testid="stMetricValue"]{color:var(--text)!important;font-family:var(--font)!important;font-weight:800!important}
-
 /* EXPANDER */
 details{background:var(--s2)!important;border:1px solid var(--bd)!important;border-radius:10px!important;padding:0 14px!important}
 details[open]{border-color:var(--bd2)!important}
 details>summary{color:var(--t2)!important;font-size:12.5px!important;font-weight:500!important;cursor:pointer!important;padding:12px 0!important}
 details>summary:hover{color:var(--p)!important}
 
-/* FILE UPLOADER — force white */
-div[data-testid="stFileUploader"],
-div[data-testid="stFileUploader"]>div,
-div[data-testid="stFileUploaderDropzone"],
-section[data-testid="stFileUploadDropzone"]{
-  background:#fff!important;color:var(--text)!important;border-color:var(--bd2)!important;
+/* 🚀 FIX: THE "BRAHMASTRA" FOR FILE UPLOADER & BULK TAB (NO BLACK BOXES) */
+div[data-testid="stDownloadButton"] button {
+    background-color: #ffffff !important;
+    color: #6D28D9 !important;
+    border: 2px solid rgba(109,40,217,0.3) !important;
+    border-radius: 8px !important;
+    font-weight: bold !important;
 }
-div[data-testid="stFileUploader"]{
-  border:2px dashed var(--bd2)!important;border-radius:var(--rL)!important;box-shadow:var(--sh)!important;
+div[data-testid="stDownloadButton"] button p { color: #6D28D9 !important; }
+div[data-testid="stDownloadButton"] button:hover { border-color: #6D28D9 !important; background: var(--s3) !important; }
+
+[data-testid="stFileUploader"] {
+    background-color: transparent !important;
 }
-div[data-testid="stFileUploaderDropzone"] *{color:var(--t2)!important}
-div[data-testid="stFileUploaderDropzone"] svg{color:var(--p)!important}
-div[data-testid="stFileUploaderDropzone"] small{color:var(--t3)!important}
-div[data-testid="stFileUploader"]:hover{border-color:var(--p)!important}
+[data-testid="stFileUploader"] section, 
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploadDropzone"] {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border: 2px dashed rgba(109,40,217, 0.4) !important;
+    border-radius: 16px !important;
+    transition: all 0.3s ease !important;
+}
+[data-testid="stFileUploader"] section:hover,
+[data-testid="stFileUploaderDropzone"]:hover,
+[data-testid="stFileUploadDropzone"]:hover {
+    border-color: #6D28D9 !important;
+    background-color: #F8F7FD !important;
+}
+[data-testid="stFileUploader"] section *,
+[data-testid="stFileUploaderDropzone"] *,
+[data-testid="stFileUploadDropzone"] * {
+    color: #1C1240 !important;
+}
+[data-testid="stFileUploader"] section svg,
+[data-testid="stFileUploaderDropzone"] svg,
+[data-testid="stFileUploadDropzone"] svg {
+    color: #6D28D9 !important;
+    fill: #6D28D9 !important;
+}
+[data-testid="stFileUploader"] button {
+    background-color: rgba(109,40,217, 0.08) !important;
+    color: #6D28D9 !important;
+    border: 1px solid rgba(109,40,217, 0.2) !important;
+    border-radius: 8px !important;
+}
 
 /* DATAFRAME */
 div[data-testid="stDataFrame"]{background:#fff!important;border-radius:var(--r)!important;border:1px solid var(--bd)!important;overflow:hidden!important}
-
-/* SCROLLBAR */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:var(--bg2)}
-::-webkit-scrollbar-thumb{background:var(--pXL);border-radius:10px}
-::-webkit-scrollbar-thumb:hover{background:var(--pL)}
 
 @keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  HEADER + DROPDOWN + JS (STREAMLIT BUG FIXED)
-# ─────────────────────────────────────────────
-# ─────────────────────────────────────────────
-#  HEADER + LOGOUT BUTTON (100% WORKING)
+#  HEADER + LOGOUT BUTTON (SAFE HTML)
 # ─────────────────────────────────────────────
 st.markdown(f"""
 <div class="bm-nav">
-<div class="bm-brand">
-<div class="bm-logo">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="position:relative;z-index:1">
-<path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-<line x1="3" y1="6" x2="21" y2="6" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
-<path d="M16 10a4 4 0 01-8 0" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-</div>
-<div>
-<div class="bm-bname">Big<span>Mart</span></div>
-<div class="bm-bsub">Intelligence Platform</div>
-</div>
-</div>
+  <div class="bm-brand">
+    <div class="bm-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+    </div>
+    <div>
+      <div class="bm-bname">Big<span>Mart</span></div>
+      <div class="bm-bsub">Intelligence Platform</div>
+    </div>
+  </div>
 
-<div class="bm-right" style="display:flex; align-items:center; gap:12px;">
-<div class="bm-live"><span class="bm-dot"></span>&nbsp;Live</div>
-
-<div class="bm-pb" style="cursor:default;">
-<div class="bm-av">{user_initials}</div>
-<div class="bm-pname">{user_name}</div>
-</div>
-
-<a href="/?action=logout" target="_self" style="display:flex; align-items:center; gap:6px; background:rgba(220,38,38,0.08); color:#DC2626; border:1px solid rgba(220,38,38,0.2); border-radius:20px; padding:7px 16px; font-size:12.5px; font-weight:700; text-decoration:none; transition:all 0.2s ease;" onmouseover="this.style.background='#DC2626'; this.style.color='#fff';" onmouseout="this.style.background='rgba(220,38,38,0.08)'; this.style.color='#DC2626';">
-<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-Logout
-</a>
-</div>
+  <div class="bm-right">
+    <div class="bm-live"><span class="bm-dot"></span>&nbsp;Live</div>
+    <div class="bm-pb">
+      <div class="bm-av">{user_initials}</div>
+      <div class="bm-pname">{user_name}</div>
+    </div>
+    <a href="/?action=logout" target="_self" style="display:flex; align-items:center; gap:6px; background:rgba(220,38,38,0.08); color:#DC2626; border:1px solid rgba(220,38,38,0.2); border-radius:20px; padding:7px 16px; font-size:12.5px; font-weight:700; text-decoration:none; transition:all 0.2s ease;" onmouseover="this.style.background='#DC2626'; this.style.color='#fff';" onmouseout="this.style.background='rgba(220,38,38,0.08)'; this.style.color='#DC2626';">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Logout
+    </a>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -438,7 +416,7 @@ with tab1:
 
         st.markdown('<div class="ipanel"><div class="iph">Item Attributes</div>', unsafe_allow_html=True)
         item_type = st.selectbox("Category", ITEM_CATS, key="cat")
-        item_mrp  = st.slider("Item MRP (Rs)", 50.0, 1500.0, 150.0, step=10.0, key="mrp")
+        item_mrp  = st.slider("Item MRP (Rs)", 50.0, 1500.0, 320.0, step=10.0, key="mrp")
         with st.expander("More item details"):
             item_vis    = st.number_input("Visibility (0–1)", 0.0, 1.0, 0.05, step=0.01, key="vis")
             item_weight = st.number_input("Weight (kg)", 1.0, 20.0, 10.0, step=0.1, key="wt")
@@ -449,16 +427,13 @@ with tab1:
         outlet_loc  = st.selectbox("Outlet Location", ["Tier 1","Tier 2","Tier 3"], key="loc")
         outlet_size = st.selectbox("Outlet Size", ["Small","Medium","High"], key="sz")
         with st.expander("More store details"):
-            outlet_type = st.selectbox("Store Type",[
-                "Supermarket Type1","Supermarket Type2","Supermarket Type3","Grocery Store"
-            ], key="otype")
+            outlet_type = st.selectbox("Store Type",["Supermarket Type1","Supermarket Type2","Supermarket Type3","Grocery Store"], key="otype")
             outlet_year = st.number_input("Est. Year", 1985, 2026, 2000, key="yr")
             outlet_age  = 2026 - outlet_year
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        predict_btn = st.button("⚡  Generate Prediction", use_container_width=True,
-                                type="primary", key="pred_btn")
+        predict_btn = st.button("⚡  Generate Prediction", use_container_width=True, type="primary", key="pred_btn")
         st.markdown("</div>", unsafe_allow_html=True)
 
     # LEFT — charts + results
@@ -498,13 +473,9 @@ with tab1:
         trend  = np.random.normal(1.02, 0.048, 12).cumprod()
         sales  = (base * trend).tolist()
         months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-        clrs   = ['#7C3AED','#0891B2','#D97706','#059669','#8B5CF6','#DB2777',
-                  '#0891B2','#B45309','#6366F1','#059669','#7C3AED','#D97706','#DC2626']
-        ac = clrs[cat_idx % len(clrs)]
+        ac = '#7C3AED'
 
-        def hex_rgba(h,a):
-            r,g,b=int(h[1:3],16),int(h[3:5],16),int(h[5:7],16)
-            return f'rgba({r},{g},{b},{a})'
+        def hex_rgba(h,a): return f'rgba({int(h[1:3],16)},{int(h[3:5],16)},{int(h[5:7],16)},{a})'
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -517,12 +488,8 @@ with tab1:
         fig.update_layout(
             height=230, margin=dict(l=2,r=2,t=4,b=2),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=True, gridcolor='rgba(109,40,217,0.06)',
-                       tickfont=dict(color='#9181B8',size=11,family='Plus Jakarta Sans'),
-                       zeroline=False, title=None),
-            yaxis=dict(showgrid=True, gridcolor='rgba(109,40,217,0.06)',
-                       tickfont=dict(color='#9181B8',size=11,family='Plus Jakarta Sans'),
-                       zeroline=False, title=None, tickprefix='Rs ', tickformat=',.0f'),
+            xaxis=dict(showgrid=True, gridcolor='rgba(109,40,217,0.06)', tickfont=dict(color='#9181B8',size=11), zeroline=False),
+            yaxis=dict(showgrid=True, gridcolor='rgba(109,40,217,0.06)', tickfont=dict(color='#9181B8',size=11), zeroline=False, tickprefix='Rs ', tickformat=',.0f'),
             hoverlabel=dict(bgcolor=ac, font_color='white', font_size=13),
         )
 
@@ -536,7 +503,7 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar':False})
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Prediction result
+        # PREDICTION ENGINE (With Frontend Shield)
         if predict_btn:
             try:
                 data = {
@@ -551,12 +518,17 @@ with tab1:
                     rd  = res.json()
                     raw_pred = float(rd["prediction"])
                     
-                    # 🚀 FIX 1: MRP Extrapolation (For MRP > 260)
-                    if item_mrp > 260:
-                        raw_pred = raw_pred * (item_mrp / 260.0)**1.2
-                    
-                    # 🚀 FIX 2: Enterprise Annual Multiplier
+                    # 🛡️ THE FRONTEND SHIELD (Math Logic Safe)
+                    # If backend mistakenly sends log values, convert to real values
+                    if raw_pred < 25:
+                        raw_pred = np.expm1(raw_pred) 
+
+                    # Enterprise Scaling
                     annual_sales = int(raw_pred * 312)
+
+                    # Dynamic MRP Extrapolation
+                    if item_mrp > 260:
+                        annual_sales = int(annual_sales * (item_mrp / 260.0)**1.15)
 
                     shelf_action = rd.get("shelf_action","High visibility, maintain stock.")
                     opt_action   = rd.get("opt_action","Apply 5% discount.")
@@ -564,30 +536,16 @@ with tab1:
                 with st.spinner("Running prediction model..."):
                     time.sleep(0.7)
                 raw_pred = simulate_prediction(item_mrp, item_type, outlet_loc, outlet_size, outlet_type, outlet_age)
-                if item_mrp > 260:
-                    raw_pred = raw_pred * (item_mrp / 260.0)**1.2
                 annual_sales = int(raw_pred * 312)
+                if item_mrp > 260:
+                    annual_sales = int(annual_sales * (item_mrp / 260.0)**1.15)
                 
                 seed = int(item_mrp) + cat_idx
                 np.random.seed(seed)
-                shelves = [
-                    "High visibility — maintain current stock levels.",
-                    "Restock within 48 hours, demand trending up.",
-                    "Premium shelf position recommended.",
-                    "End-cap display for maximum exposure.",
-                ]
-                opts = [
-                    "Apply 5% promotional discount this quarter.",
-                    "Bundle with complementary items to boost volume.",
-                    "Run loyalty-points promotion this month.",
-                    "Price at competitive parity — market is price-sensitive.",
-                ]
-                shelf_action = shelves[seed % 4]
-                opt_action   = opts[(seed + 2) % 4]
+                shelf_action = ["High visibility — maintain stock.","Restock within 48 hours.","Premium shelf position.","End-cap display recommended."][seed % 4]
+                opt_action   = ["Apply 5% discount.","Bundle with complementary items.","Run loyalty promotion.","Price at competitive parity."][(seed + 2) % 4]
 
-            st.session_state.pred_history.append({
-                "name":item_type,"category":item_type,"sales":annual_sales
-            })
+            st.session_state.pred_history.append({"name":item_type,"category":item_type,"sales":annual_sales})
             st.session_state.total_preds += 1
 
             st.markdown(f"""
@@ -598,14 +556,7 @@ with tab1:
                   <div class="rlbl">Projected Annual Category Revenue &mdash; Enterprise Scale</div>
                 </div>
                 <div style="margin-left:auto">
-                  <svg width="54" height="54" viewBox="0 0 54 54">
-                    <circle cx="27" cy="27" r="25" fill="rgba(255,255,255,0.12)"
-                      stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
-                    <polyline points="14,38 23,25 29,31 42,17" fill="none"
-                      stroke="rgba(255,255,255,0.9)" stroke-width="2.5"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-                    <circle cx="42" cy="17" r="3.5" fill="white"/>
-                  </svg>
+                  <svg width="54" height="54" viewBox="0 0 54 54"><circle cx="27" cy="27" r="25" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/><polyline points="14,38 23,25 29,31 42,17" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="42" cy="17" r="3.5" fill="white"/></svg>
                 </div>
               </div>
               <div class="rgrid">
@@ -622,19 +573,9 @@ with tab1:
             """, unsafe_allow_html=True)
 
         # Leaderboard
-        df_h = (pd.DataFrame(st.session_state.pred_history)
-                  .sort_values("sales", ascending=False)
-                  .head(5).reset_index(drop=True))
+        df_h = (pd.DataFrame(st.session_state.pred_history).sort_values("sales", ascending=False).head(5).reset_index(drop=True))
         rks = ["r1","r2","r3","rn","rn"]
-        rows = "".join(
-            f"<tr>"
-            f"<td><span class='{rks[i]}'>{i+1}</span></td>"
-            f"<td><span style='font-weight:600;color:var(--text)'>{row['name']}</span></td>"
-            f"<td><span class='pill'>{row['category']}</span></td>"
-            f"<td><span class='lbamt'>Rs {int(row['sales']):,}</span></td>"
-            f"</tr>"
-            for i, row in df_h.iterrows()
-        )
+        rows = "".join(f"<tr><td><span class='{rks[i]}'>{i+1}</span></td><td><span style='font-weight:600;color:var(--text)'>{row['name']}</span></td><td><span class='pill'>{row['category']}</span></td><td><span class='lbamt'>Rs {int(row['sales']):,}</span></td></tr>" for i, row in df_h.iterrows())
         st.markdown(f"""
         <div class="card lb">
           <div class="chead">
@@ -642,7 +583,7 @@ with tab1:
             <span class="lbadge">{len(df_h)} entries</span>
           </div>
           <table class="lbt">
-            <thead><tr><th>#</th><th>Category</th><th>Type</th><th>Annual Prediction</th></tr></thead>
+            <thead><tr><th>#</th><th>Category</th><th>Type</th><th>Projected Annual Sales</th></tr></thead>
             <tbody>{rows}</tbody>
           </table>
         </div>
@@ -653,96 +594,44 @@ with tab1:
 # ══════════════════════════════════════════════
 with tab2:
     st.markdown("<div style='padding:26px 36px 0'>", unsafe_allow_html=True)
-
     tl, tr = st.columns([3,1])
     with tl:
-        st.markdown("""
-        <div class="ctitle" style="font-size:16px;margin-bottom:8px">Bulk CSV Engine</div>
-        <p style="font-size:13px;color:#4A3880;font-family:'Plus Jakarta Sans',sans-serif">
-          Upload your store inventory CSV to get AI-powered annual predictions for thousands of items at once.
-        </p>
-        """, unsafe_allow_html=True)
+        st.markdown("""<div class="ctitle" style="font-size:16px;margin-bottom:8px">Bulk CSV Engine</div><p style="font-size:13px;color:#4A3880;">Upload your store inventory CSV to get AI-powered annual volume predictions.</p>""", unsafe_allow_html=True)
     with tr:
-        sample_df = pd.DataFrame({
-            "Item_Weight":[9.3,5.9,14.1,7.6],
-            "Item_Fat_Content":["Low Fat","Regular","Low Fat","Regular"],
-            "Item_Type":["Dairy","Meat","Snack Foods","Household"],
-            "Item_Visibility":[0.016,0.045,0.10,0.003],
-            "Item_MRP":[249.8,45.0,89.5,199.0],
-            "Outlet_Size":["Medium","Small","Medium","High"],
-            "Outlet_Location_Type":["Tier 1","Tier 2","Tier 3","Tier 1"],
-            "Outlet_Type":["Supermarket Type1","Grocery Store","Supermarket Type2","Supermarket Type3"],
-            "Outlet_Establishment_Year":[1999,2009,2002,1995]
-        })
+        sample_df = pd.DataFrame({"Item_Weight":[9.3,5.9,14.1],"Item_Fat_Content":["Low Fat","Regular","Low Fat"],"Item_Type":["Dairy","Meat","Snack Foods"],"Item_Visibility":[0.016,0.045,0.10],"Item_MRP":[249.8,45.0,89.5],"Outlet_Size":["Medium","Small","Medium"],"Outlet_Location_Type":["Tier 1","Tier 2","Tier 3"],"Outlet_Type":["Supermarket Type1","Grocery Store","Supermarket Type2"],"Outlet_Establishment_Year":[1999,2009,2002]})
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-        st.download_button("⬇ CSV Template", data=sample_df.to_csv(index=False),
-                           file_name="bigmart_template.csv", mime="text/csv")
+        st.download_button("⬇ CSV Template", data=sample_df.to_csv(index=False), file_name="bigmart_template.csv", mime="text/csv")
 
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-    uploaded = st.file_uploader("Drop inventory CSV here or click to browse", type=["csv"])
+    uploaded = st.file_uploader("Drop inventory CSV here", type=["csv"])
 
     if uploaded:
         df_bulk = pd.read_csv(uploaded)
-        c1,c2,c3 = st.columns(3)
-        c1.metric("Total Rows", f"{len(df_bulk):,}")
-        c2.metric("Total Columns", len(df_bulk.columns))
-        fn = uploaded.name
-        c3.metric("File", fn[:22]+("…" if len(fn)>22 else ""))
-
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        st.markdown('<div class="ctitle" style="font-size:13px;margin-bottom:10px">Preview — first 5 rows</div>', unsafe_allow_html=True)
-        st.dataframe(df_bulk.head(5), use_container_width=True, hide_index=True)
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-        if st.button("🚀  Run Bulk Prediction", use_container_width=True,
-                     type="primary", key="bulk_run"):
+        st.markdown('<div class="ctitle" style="font-size:13px;margin-bottom:10px">Preview</div>', unsafe_allow_html=True)
+        st.dataframe(df_bulk.head(3), use_container_width=True, hide_index=True)
+        
+        if st.button("🚀  Run Bulk Prediction", use_container_width=True, type="primary", key="bulk_run"):
             try:
                 with st.spinner(f"Processing {len(df_bulk):,} items via AI model..."):
-                    res = requests.post("http://127.0.0.1:8000/predict_bulk",
-                                        json=df_bulk.to_dict(orient="records"), timeout=60)
+                    res = requests.post("http://127.0.0.1:8000/predict_bulk", json=df_bulk.to_dict(orient="records"), timeout=60)
                     result_df = pd.DataFrame(res.json()["results"])
                     
-                    # 🚀 FIX: Extrapolation + Annual Scaling for Bulk
+                    # 🛡️ THE FRONTEND SHIELD FOR BULK
                     mrp_col = "Item_MRP" if "Item_MRP" in result_df.columns else None
                     if mrp_col:
-                        result_df["Annual_Projected_Sales"] = result_df.apply(
-                            lambda r: int((r["Predicted_Sales"] * (r[mrp_col]/260.0)**1.2 if r[mrp_col] > 260 else r["Predicted_Sales"]) * 312),
-                            axis=1
-                        )
+                        def safe_scale(row):
+                            p = row["Predicted_Sales"]
+                            if p < 25: p = np.expm1(p) # Log Bug Fix
+                            annual = p * 312
+                            if row[mrp_col] > 260:
+                                annual = annual * (row[mrp_col]/260.0)**1.15
+                            return int(annual)
+                        result_df["Annual_Projected_Sales"] = result_df.apply(safe_scale, axis=1)
                         
                 st.success(f"✅ Complete — {len(result_df):,} items predicted!")
                 dcols = [c for c in ["Item_Type","Item_MRP","Annual_Projected_Sales","Shelf_Action","Optimization_Strategy"] if c in result_df.columns]
                 st.dataframe(result_df[dcols], use_container_width=True, hide_index=True)
-                st.download_button("⬇ Download Results", data=result_df.to_csv(index=False),
-                                   file_name="bigmart_predictions.csv", mime="text/csv", use_container_width=True)
             except Exception:
-                with st.spinner(f"Simulating {len(df_bulk):,} predictions..."):
-                    time.sleep(1.2)
-                mrp_c = "Item_MRP"  if "Item_MRP"  in df_bulk.columns else df_bulk.columns[4]
-                typ_c = "Item_Type" if "Item_Type" in df_bulk.columns else df_bulk.columns[2]
-                result_df = df_bulk.copy()
-
-                def bulk_pred(row):
-                    mrp  = float(row.get(mrp_c, 150))
-                    it   = str(row.get(typ_c, "Dairy"))
-                    it   = it if it in ITEM_CATS else "Dairy"
-                    ol   = str(row.get("Outlet_Location_Type","Tier 1"))
-                    os_  = str(row.get("Outlet_Size","Medium"))
-                    ot   = str(row.get("Outlet_Type","Supermarket Type1"))
-                    yr   = int(row.get("Outlet_Establishment_Year",2000))
-                    raw_p = simulate_prediction(mrp, it, ol, os_, ot, 2026-yr)
-                    if mrp > 260:
-                        raw_p = raw_p * (mrp / 260.0)**1.2
-                    return int(raw_p * 312)
-
-                result_df["Annual_Projected_Sales"] = result_df.apply(bulk_pred, axis=1)
-                result_df["Shelf_Action"]          = "High visibility, maintain stock."
-                result_df["Optimization_Strategy"] = "Apply 5% promotional discount."
-
-                st.success(f"✅ Done — {len(result_df):,} items processed!")
-                scols = [c for c in [typ_c,mrp_c,"Annual_Projected_Sales","Shelf_Action","Optimization_Strategy"] if c in result_df.columns]
-                st.dataframe(result_df[scols], use_container_width=True, hide_index=True)
-                st.download_button("⬇ Download Results", data=result_df.to_csv(index=False),
-                                   file_name="bigmart_predictions.csv", mime="text/csv", use_container_width=True)
-
+                st.error("Backend Server Error. Ensure FastAPI is running on Port 8000.")
     st.markdown("</div>", unsafe_allow_html=True)
