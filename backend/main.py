@@ -4,6 +4,24 @@ import pickle
 import pandas as pd
 import os
 from typing import List, Dict, Any
+import hashlib
+from pydantic import BaseModel
+
+# ─── MongoDB setup ke andar ek naya collection add karein ───
+try:
+    from pymongo import MongoClient
+    _client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    _client.server_info()
+    _db = _client["bigmart_db"]
+    _col = _db["predictions"]
+    _users_col = _db["users"]  # NAYA: Users save karne ke liye
+    MONGO_OK = True
+    print("✅ MongoDB connected")
+except Exception:
+    _col = None
+    _users_col = None
+    MONGO_OK = False
+    print("⚠️  MongoDB not available — results won't be persisted")
 
 # ─── FastAPI Init ─────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -174,3 +192,56 @@ def predict_bulk(data_list: List[Dict[str, Any]]):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    # ─── Auth Endpoints ────────────────────────────────────────────────────────────
+
+class UserCreds(BaseModel):
+    email: str
+    password: str
+
+# Password secure rakhne ke liye hash function
+def hash_password(password: str):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+@app.post("/register")
+def register(creds: UserCreds):
+    if not MONGO_OK:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    # Check if email already exists
+    if _users_col.find_one({"email": creds.email}):
+        raise HTTPException(status_code=400, detail="Email is already registered!")
+        
+    # Save new user
+    _users_col.insert_one({
+        "email": creds.email,
+        "password": hash_password(creds.password)
+    })
+    return {"message": "Account created successfully!"}
+
+@app.post("/login")
+def login(creds: UserCreds):
+    if not MONGO_OK:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+        
+    user = _users_col.find_one({"email": creds.email})
+    
+    # Match email and hashed password
+    if not user or user["password"] != hash_password(creds.password):
+        raise HTTPException(status_code=401, detail="Invalid Email or Password!")
+        
+    return {"success": True, "email": user["email"]}
+@app.post("/reset-password")
+def reset_password(creds: UserCreds):
+    if not MONGO_OK:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+        
+    user = _users_col.find_one({"email": creds.email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found! Please create an account first.")
+        
+    # Update the password in MongoDB
+    _users_col.update_one(
+        {"email": creds.email},
+        {"$set": {"password": hash_password(creds.password)}}
+    )
+    return {"message": "Password updated successfully!"}

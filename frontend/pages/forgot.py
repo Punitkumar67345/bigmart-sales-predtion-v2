@@ -1,18 +1,16 @@
 import streamlit as st
 import requests
+import time
 
-# ─── 1. Page Config (Must be first) ──────────────────────────────────────────
+# ─── 1. Page Config ──────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Big Mart | Login",
+    page_title="Big Mart | Reset Password",
     page_icon="🛒",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# ─── 2. Bulletproof Routing & Auth ───────────────────────────────────────────
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
+# ─── 2. Routing & Logic ──────────────────────────────────────────────────────
 try:
     params = st.query_params
 except AttributeError:
@@ -21,56 +19,44 @@ except AttributeError:
 if "action" in params:
     action = params.get("action")
     if isinstance(action, list): action = action[0]
-    
-    # --- ROUTE TO REGISTER & FORGOT PAGES ---
-    if action == "go_register":
-        st.switch_page("pages/register.py")
-    elif action == "go_forgot":
-        st.switch_page("pages/forgot.py")
 
-    # --- LOGIN LOGIC ---
-    elif action == "login":
+    # --- ROUTE TO LOGIN PAGE ---
+    if action == "go_login":
+        st.switch_page("app.py")
+
+    # --- RESET LOGIC ---
+    elif action == "reset":
         em_val = params.get("em")
         if isinstance(em_val, list): em_val = em_val[0]
-        
         pwd_val = params.get("pwd")
         if isinstance(pwd_val, list): pwd_val = pwd_val[0]
-
+        
         try:
-            res = requests.post("http://127.0.0.1:8000/login", json={"email": em_val, "password": pwd_val})
+            res = requests.post("http://127.0.0.1:8000/reset-password", json={"email": em_val, "password": pwd_val})
             if res.status_code == 200:
-                st.session_state.logged_in = True
-                st.session_state.user_email = em_val
+                st.success("✅ Password updated successfully! Redirecting to Login...")
+                time.sleep(2)
+                st.switch_page("app.py")
             else:
-                st.error("🚨 Invalid Email or Password!")
+                st.error(f"🚨 {res.json().get('detail')}")
         except Exception:
             st.error("🚨 Backend server is down!")
     
-    # URL clean karo taaki page refresh par atke nahi
     try:
         st.query_params.clear()
     except AttributeError:
         st.experimental_set_query_params()
 
-# Agar login true hai toh direct Dashboard
-if st.session_state.logged_in:
-    try:
-        st.switch_page("pages/dashboard.py")
-    except Exception as e:
-        st.error(f"🚨 Routing Failed! Ensure dashboard is at `pages/dashboard.py`\n{e}")
-        st.stop()
-
 # ─── 3. Full Page CSS & HTML ─────────────────────────────────────────────────
 html_content = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=DM+Sans:wght@300;400;500&display=swap');
-
 *, html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; box-sizing: border-box; }
 .stApp { background: linear-gradient(135deg, #EAECF5 0%, #DDE2F0 100%); min-height: 100vh; }
 #MainMenu, footer, header, [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stSidebarNav"] { display: none !important; }
 .block-container { padding: 0 !important; max-width: 100% !important; }
 .page-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-.login-card { display: flex; flex-direction: row; width: 860px; max-width: 96vw; min-height: 430px; border-radius: 30px; overflow: hidden; box-shadow: 0 40px 80px rgba(90, 60, 200, 0.18), 0 8px 30px rgba(0,0,0,0.1); background: #fff; animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.login-card { display: flex; width: 860px; max-width: 96vw; min-height: 430px; border-radius: 30px; overflow: hidden; box-shadow: 0 40px 80px rgba(90, 60, 200, 0.18), 0 8px 30px rgba(0,0,0,0.1); background: #fff; animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(30px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .left-panel { flex: 1.3; padding: 50px 48px 40px 48px; background: #ffffff; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 2; }
 .brand-logo { font-family: 'Nunito', sans-serif !important; font-size: 13px; font-weight: 800; color: #7C3AED !important; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; display: flex; align-items: center; gap: 8px; }
@@ -82,8 +68,6 @@ html_content = """
 .input-wrap input { width: 100%; padding: 14px 44px 14px 46px; border: 1.5px solid #E8EDF8; border-radius: 50px; font-size: 13.5px; font-family: 'DM Sans', sans-serif !important; color: #1A1035 !important; background: #F7F9FF; outline: none; transition: all 0.25s; -webkit-appearance: none; }
 .input-wrap input:focus { border-color: #7C3AED; background: #fff; box-shadow: 0 0 0 4px rgba(124,58,237,0.08); }
 .input-wrap input::placeholder { color: #B8C1D8 !important; }
-
-/* Password Hide/Unhide Fix */
 .pwd-input { -webkit-text-security: disc; }
 .pwd-toggle:checked ~ .pwd-input { -webkit-text-security: none; }
 .eye-label { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer; z-index: 10; user-select: none; transition: color 0.2s; color: #B8C1D8; line-height: 1; }
@@ -92,20 +76,10 @@ html_content = """
 .pwd-toggle:checked ~ .eye-label .eye-closed { display: none; }
 .pwd-toggle:not(:checked) ~ .eye-label .eye-open { display: none; }
 .pwd-toggle:not(:checked) ~ .eye-label .eye-closed { display: inline; }
-
-.extras-row { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 26px 4px; }
-.remember { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #64748B !important; cursor: pointer; user-select: none; }
-.remember input[type="checkbox"] { width: 15px; height: 15px; accent-color: #7C3AED; cursor: pointer; }
-
-/* Updated Forgot Button Style */
-.forgot-btn { font-size: 12.5px; color: #7C3AED !important; font-weight: 600; cursor: pointer; transition: opacity 0.2s; background: none; border: none; padding: 0; font-family: inherit; }
-.forgot-btn:hover { opacity: 0.75; }
-
-.signin-btn { display: block; width: 100%; padding: 15px; background: linear-gradient(92deg, #7C3AED 0%, #4F46E5 100%); color: white !important; border: none; border-radius: 50px; font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'DM Sans', sans-serif !important; box-shadow: 0 8px 24px rgba(124,58,237,0.38); transition: all 0.25s ease; position: relative; overflow: hidden; margin-top: 10px; }
+.signin-btn { width: 100%; padding: 15px; background: linear-gradient(92deg, #7C3AED 0%, #4F46E5 100%); color: white !important; border: none; border-radius: 50px; font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'DM Sans', sans-serif !important; box-shadow: 0 8px 24px rgba(124,58,237,0.38); transition: all 0.25s ease; margin-top: 10px; position: relative; overflow: hidden; }
 .signin-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(124,58,237,0.5); }
 .signin-btn:active { transform: translateY(0); }
 .bottom-text { text-align: center; font-size: 12.5px; color: #94A3B8 !important; margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 6px; }
-
 .right-panel { flex: 1; background: linear-gradient(150deg, #9333EA 0%, #6D28D9 45%, #3730A3 100%); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 40px 36px 40px 60px; }
 .right-panel::before { content: ''; position: absolute; left: -72px; top: -10%; width: 145px; height: 120%; background: white; border-radius: 0 60% 60% 0 / 0 50% 50% 0; z-index: 1; }
 .right-panel::after { content: ''; position: absolute; left: -40px; top: 50%; transform: translateY(-50%); width: 100px; height: 100px; background: white; border-radius: 50%; z-index: 2; }
@@ -123,39 +97,32 @@ html_content = """
 
 <div class="left-panel">
 <div class="brand-logo">🛒 Big Mart <span>intelligence</span></div>
-<h1 class="hello-title">Hello!</h1>
-<p class="signin-subtitle">Sign in to your account</p>
+<h1 class="hello-title">Reset Password</h1>
+<p class="signin-subtitle">Enter your email and a new password</p>
 
 <form action="" target="_top" method="GET" style="margin:0; padding:0;">
   
   <div class="input-wrap">
     <span class="icon">✉️</span>
-    <input type="email" name="em" placeholder="E-mail (e.g. admin@bigmart.com)" required />
+    <input type="email" name="em" placeholder="Registered E-mail" required />
   </div>
 
   <div class="input-wrap">
     <span class="icon">🔒</span>
     <input type="checkbox" id="show-pass" class="pwd-toggle" style="display: none !important; width: 0 !important; height: 0 !important; padding: 0 !important; margin: 0 !important; border: none !important; position: absolute; visibility: hidden;">
-    <input type="text" name="pwd" class="pwd-input" placeholder="Password" required />
+    <input type="text" name="pwd" class="pwd-input" placeholder="New Password" required />
     <label for="show-pass" class="eye-label">
       <span class="eye-open">🙈</span>
       <span class="eye-closed">👁️</span>
     </label>
   </div>
 
-  <div class="extras-row">
-    <label class="remember">
-      <input type="checkbox" checked /> Remember me
-    </label>
-    <button type="submit" name="action" value="go_forgot" formnovalidate class="forgot-btn">
-      Forgot password?
-    </button>
-  </div> <button type="submit" name="action" value="login" class="signin-btn">SIGN IN</button>
+  <button type="submit" name="action" value="reset" class="signin-btn">UPDATE PASSWORD</button>
   
   <p class="bottom-text">
-    Don't have an account? 
-    <button type="submit" name="action" value="go_register" formnovalidate style="background:none; border:none; color:#7C3AED; font-weight:700; cursor:pointer; font-size:12.5px; padding:0; font-family:inherit;">
-      Create
+    Remembered it? 
+    <button type="submit" name="action" value="go_login" formnovalidate style="background:none; border:none; color:#7C3AED; font-weight:700; cursor:pointer; font-size:12.5px; padding:0; font-family:inherit;">
+      Back to Sign In
     </button>
   </p>
 </form>
@@ -167,9 +134,9 @@ html_content = """
 <div class="orb2"></div>
 <div class="orb3"></div>
 <div class="right-inner">
-<h3>Welcome Back!</h3>
-<p>AI-powered sales forecasting,<br>shelf intelligence &amp; multi-objective<br>optimization — all in one place.</p>
-<span class="right-badge">⚡ Enterprise Grade</span>
+<h3>Secure Your Account</h3>
+<p>Update your credentials to<br>regain access to your<br>enterprise dashboard.</p>
+<span class="right-badge">🔒 Encrypted</span>
 </div>
 </div>
 
@@ -177,5 +144,4 @@ html_content = """
 </div>
 """
 
-# Render the HTML safely
 st.markdown(html_content, unsafe_allow_html=True)
